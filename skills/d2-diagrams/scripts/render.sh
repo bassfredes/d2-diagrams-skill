@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
 # render.sh — render a .d2 file to SVG with the best available layout engine.
 #
-# Vendored, unmodified, from khollingworth/d2-diagram-skill (MIT License,
-# Copyright (c) 2026 Kevin Hollingworth). See ../../../LICENSE for the full
-# notice. https://github.com/khollingworth/d2-diagram-skill
+# Vendored from khollingworth/d2-diagram-skill (MIT License, Copyright (c)
+# 2026 Kevin Hollingworth). See ../../../LICENSE for the full notice.
+# https://github.com/khollingworth/d2-diagram-skill
+# Modified in this repo: WASM fallback backend (see below).
+#
+# Backend: the d2 CLI when it is on PATH. Otherwise, if setup.sh installed the
+# WASM fallback (@terrastruct/d2 in ${D2_WASM_HOME:-~/.cache/d2-diagrams-skill/wasm}),
+# rendering goes through scripts/render-wasm.mjs: same compiler, ELK/dagre only.
+# In WASM mode --engine auto means elk; tala, --animate, --seed and --elk-* are
+# unavailable (tala/--animate fail, --seed/--elk-* are ignored with a note).
+# --wasm forces the WASM backend even when d2 is installed.
 #
 # Engine selection (default --engine auto):
 #   1. TALA installed AND licensed        -> tala
@@ -40,6 +48,7 @@
 #   --elk-OPTION VALUE             pass an ELK tuning flag through (e.g. --elk-padding "...")
 #   --no-remote-assets             refuse to render if the source (or its local
 #                                  imports) references remote http(s) assets
+#   --wasm                         force the WASM fallback backend
 #   --quiet                        suppress the engine report
 #   -h, --help                     show this help
 #
@@ -67,6 +76,7 @@ SALT_SET=0
 SALT=""
 ELK_FLAGS=()
 NO_REMOTE=0
+FORCE_WASM=0
 QUIET=0
 INPUT=""
 OUTPUT=""
@@ -117,6 +127,7 @@ while [ $# -gt 0 ]; do
     --salt) need_value --salt $#; SALT_SET=1; SALT="$2"; shift 2 ;;
     --elk-*) need_value "$1" $#; ELK_FLAGS+=("$1" "$2"); shift 2 ;;
     --no-remote-assets) NO_REMOTE=1; shift ;;
+    --wasm) FORCE_WASM=1; shift ;;
     --quiet) QUIET=1; shift ;;
     -h|--help) awk 'NR==1{next} /^#/{sub(/^# ?/,""); print; next} {exit}' "$0"; exit 0 ;;
     -*) err "unknown option: $1 (see --help)"; exit 2 ;;
@@ -141,14 +152,29 @@ case "$OUTPUT" in
   *) err "output must end in .svg (SVG is the deliverable; add --png for a raster preview): $OUTPUT"; exit 2 ;;
 esac
 
-command -v d2 >/dev/null 2>&1 || {
-  err "d2 is not installed. Install it first:"
-  err "  macOS:          brew install d2"
-  err "  Linux/macOS:    curl -fsSL https://d2lang.com/install.sh | sh -s --"
-  err "  Windows:        winget install --id Terrastruct.D2  (or scoop install d2)"
-  err "  Go toolchain:   go install oss.terrastruct.com/d2@latest"
-  exit 3
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+WASM_HOME="${D2_WASM_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/d2-diagrams-skill/wasm}"
+wasm_available() {
+  command -v node >/dev/null 2>&1 && [ -f "$WASM_HOME/node_modules/@terrastruct/d2/package.json" ]
 }
+
+BACKEND="native"
+if [ "$FORCE_WASM" -eq 1 ] || ! command -v d2 >/dev/null 2>&1; then
+  if wasm_available; then
+    BACKEND="wasm"
+  elif [ "$FORCE_WASM" -eq 1 ]; then
+    err "--wasm requested but the WASM fallback is not installed. Run: scripts/setup.sh --wasm"
+    exit 3
+  else
+    err "d2 is not installed. Run scripts/setup.sh (installs the d2 CLI via Homebrew, or"
+    err "the WASM fallback via npm when the CLI can't be installed), or install d2 directly:"
+    err "  macOS:          brew install d2"
+    err "  Linux/macOS:    curl -fsSL https://d2lang.com/install.sh | sh -s --"
+    err "  Windows:        winget install --id Terrastruct.D2  (or scoop install d2)"
+    err "  Go toolchain:   go install oss.terrastruct.com/d2@latest"
+    exit 3
+  fi
+fi
 
 tala_installed() { command -v d2plugin-tala >/dev/null 2>&1; }
 
@@ -205,6 +231,59 @@ if [ "$NO_REMOTE" -eq 1 ] && [ -n "$REMOTE_HOSTS" ]; then
   err "hosts: $REMOTE_HOSTS"
   err "Remove the remote icon/image URLs (or drop --no-remote-assets if you trust this source)."
   exit 1
+fi
+
+# --- WASM backend ------------------------------------------------------------------
+if [ "$BACKEND" = "wasm" ]; then
+  NOTES=""
+  case "$ENGINE" in
+    auto) ENGINE="elk" ;;
+    elk|dagre) : ;;
+    tala) err "TALA is not available in the WASM fallback. Install the d2 CLI and TALA, or use --engine elk."; exit 1 ;;
+    *) err "unknown engine: $ENGINE (use auto|tala|elk|dagre)"; exit 2 ;;
+  esac
+  [ -n "$ANIMATE" ] && { err "--animate is not supported by the WASM fallback. Install the d2 CLI."; exit 1; }
+  [ -n "$SEED" ] && NOTES="$NOTES --seed ignored (TALA only)."
+  [ "${#ELK_FLAGS[@]}" -gt 0 ] && NOTES="$NOTES --elk-* tuning flags ignored (not exposed by the WASM build)."
+  set -- --module "$WASM_HOME" --engine "$ENGINE"
+  [ -n "$THEME" ] && set -- "$@" --theme "$THEME"
+  [ -n "$DARK_THEME" ] && set -- "$@" --dark-theme "$DARK_THEME"
+  [ "$SKETCH" -eq 1 ] && set -- "$@" --sketch
+  [ -n "$PAD" ] && set -- "$@" --pad "$PAD"
+  [ "$TARGET_SET" -eq 1 ] && set -- "$@" --target "$TARGET"
+  [ "$NO_XML_TAG" -eq 1 ] && set -- "$@" --no-xml-tag
+  [ "$SALT_SET" -eq 1 ] && set -- "$@" --salt "$SALT"
+  PNG_PATH=""
+  if [ "$WANT_PNG" -eq 1 ]; then PNG_PATH="${OUTPUT%.svg}.png"; set -- "$@" --png "$PNG_PATH"; fi
+  WASM_OUT=$(node "$SCRIPT_DIR/render-wasm.mjs" "$@" "$INPUT" "$OUTPUT" 2>&1)
+  rc=$?
+  if [ "$rc" -eq 4 ]; then
+    printf '%s\n' "$WASM_OUT" >&2
+    if [ "$PREVIEW_OPTIONAL" -eq 1 ]; then
+      PNG_PATH=""
+    else
+      err "--png was requested; failing so the miss is not silent (pass --preview-optional for best-effort)."
+      exit 1
+    fi
+  elif [ "$rc" -ne 0 ]; then
+    printf '%s\n' "$WASM_OUT" >&2
+    exit 1
+  fi
+  # Surface the resvg approximation warning (stderr lines from the helper).
+  printf '%s\n' "$WASM_OUT" | grep '^render-wasm:' >&2
+  PNG_VIA=$(printf '%s\n' "$WASM_OUT" | sed -n 's/^png-via: //p')
+  report "engine: $ENGINE (wasm)"
+  if [ "$FORCE_WASM" -eq 1 ]; then WHY="--wasm given"; else WHY="d2 CLI not available"; fi
+  report "fallback: $WHY — rendered with the WASM build (@terrastruct/d2).$NOTES"
+  [ -n "$REMOTE_HOSTS" ] && report "remote: $REMOTE_HOSTS"
+  if [ -d "${OUTPUT%.svg}" ] && [ ! -f "$OUTPUT" ]; then
+    report "svg: ${OUTPUT%.svg}/ (one SVG per board)"
+    [ -n "$PNG_PATH" ] && PNG_PATH="${OUTPUT%.svg}-preview/ (one PNG per board)"
+  else
+    report "svg: $OUTPUT"
+  fi
+  [ -n "$PNG_PATH" ] && report "png: $PNG_PATH${PNG_VIA:+ (via $PNG_VIA)}"
+  exit 0
 fi
 
 # --- pick engine --------------------------------------------------------------

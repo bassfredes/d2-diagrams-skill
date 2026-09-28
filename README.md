@@ -11,8 +11,8 @@ This merges two things:
 - The render-and-self-check workflow, engine auto-selection
   (TALA → ELK fallback with a watermark guard), and the guided toolchain
   setup from [khollingworth/d2-diagram-skill](https://github.com/khollingworth/d2-diagram-skill)
-  (`scripts/render.sh` and `scripts/setup.sh` are vendored unmodified from
-  there — MIT, see [LICENSE](LICENSE)).
+  (`scripts/render.sh` and `scripts/setup.sh` are vendored from there — MIT,
+  see [LICENSE](LICENSE) — with a WASM fallback added, see below).
 - A denser D2 syntax/pattern reference (shapes, containers, classes, vars,
   SQL tables, ERDs, decision trees, theme IDs, D2-vs-Mermaid) written for
   this repo.
@@ -48,6 +48,19 @@ cp -r d2-diagrams-skill/skills/d2-diagrams ~/.claude/skills/
 inside d2, so SVG rendering needs nothing else; the PNG self-inspection step
 downloads a headless browser on first use (offline, deliver SVG-only with
 `--preview-optional`).
+
+**WASM fallback (no d2 CLI):** where the CLI can't be installed — sandboxed
+agents, or networks that block d2lang.com, GitHub releases and the Go proxy
+but allow npm — `scripts/setup.sh` installs the official WASM build
+[`@terrastruct/d2`](https://www.npmjs.com/package/@terrastruct/d2) plus
+`playwright-core` and `@resvg/resvg-js` into
+`${D2_WASM_HOME:-~/.cache/d2-diagrams-skill/wasm}` (Node.js 18+, nothing
+global), and `scripts/render.sh` uses it automatically. Same compiler and
+themes, ELK/dagre layouts, sketch mode, dark themes, imports and multi-board
+sources; no TALA, `--animate`, `--seed` or `--elk-*` tuning. PNG previews use
+any installed Chrome/Chromium/Edge (or `D2_BROWSER_PATH`); without one they
+fall back to resvg, whose text metrics are approximate. Force this backend
+with `setup.sh --wasm` + `render.sh --wasm`.
 
 ## Uninstall
 
@@ -108,7 +121,8 @@ watermark and re-renders with ELK — you never get a surprise
 
 - [D2](https://github.com/terrastruct/d2) and [TALA](https://github.com/terrastruct/TALA)
   by Terrastruct.
-- `scripts/render.sh` and `scripts/setup.sh` vendored from
+- `scripts/render.sh` and `scripts/setup.sh` vendored (with the WASM
+  fallback added) from
   [khollingworth/d2-diagram-skill](https://github.com/khollingworth/d2-diagram-skill)
   (MIT), which itself credits D2 rendering conventions from
   [claude-d2-diagrams](https://github.com/heathdutton/claude-d2-diagrams) by

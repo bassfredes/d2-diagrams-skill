@@ -42,8 +42,15 @@ bash "${CLAUDE_SKILL_DIR}/scripts/setup.sh" --check-only
 ```
 
 - `d2: ok` → proceed.
-- `d2: MISSING` → tell the user, then run `scripts/setup.sh` (no flags) to
-  install via Homebrew where available, or show them the printed install
+- `d2: ok (wasm fallback …)` → proceed. There is no d2 CLI, so `render.sh`
+  renders through the official WASM build (`@terrastruct/d2`): same compiler,
+  ELK/dagre only — no TALA, `--animate`, `--seed` or `--elk-*` tuning. Say
+  this once to the user, with the native install command for their OS.
+- `d2: MISSING` → tell the user, then run `scripts/setup.sh` (no flags). It
+  installs d2 via Homebrew where available; otherwise (no Homebrew, or
+  d2lang.com / GitHub / the Go proxy blocked, as in sandboxes and corporate
+  networks) it installs the WASM fallback from npm into a user cache
+  (needs Node.js 18+; nothing global). If both fail, show the printed install
   commands. Don't render blind — nothing else in this skill works without d2.
 - `tala: not installed` or `unlicensed` → fine. ELK is the automatic fallback
   and produces good layouts. Mention TALA once only if the diagram is a
@@ -184,7 +191,9 @@ nothing in the image needs an apology or an explanation.
 
 | Symptom | Cause / fix |
 |---|---|
-| `d2: command not found` | Run `scripts/setup.sh` (guided install) |
+| `d2: command not found` | Run `scripts/setup.sh` (guided install; falls back to the WASM build via npm) |
+| `engine: elk (wasm)` in the report | No d2 CLI — WASM fallback in use. Fine for delivery; install the CLI for TALA/animations |
+| `png: … (via resvg)` + APPROXIMATE warning | WASM mode found no Chromium-based browser, so the preview ignores D2's fonts: judge layout (flow, crossings, spacing), not text fit — labels may look like they overlap edges when they don't. Set `D2_BROWSER_PATH` to Chrome/Chromium/Edge for an exact preview |
 | `D2_LAYOUT "tala" is not bundled` | TALA not on PATH — script auto-falls back to ELK; install TALA only if the user wants it |
 | `UNLICENSED` text in output | TALA without a licence — the render script re-renders with ELK automatically; a licence key goes in `TSTRUCT_TOKEN` or `~/.config/tstruct/auth.json` |
 | PNG export fails, SVG fine | First PNG render downloads a headless browser; retry once. If blocked (offline/CI), re-run with `--preview-optional`, deliver the SVG, and inspect it by converting with any available SVG rasteriser |
