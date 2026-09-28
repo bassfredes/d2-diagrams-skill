@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "d2-diagrams-skill",
+  "description": "D2 diagramming skill for Claude Code — self-checking renders, TALA/ELK layout engines, full syntax reference",
+  "owner": {
+    "name": "Bastian Fredes"
+  },
+  "plugins": [
+    {
+      "name": "d2-diagrams",
+      "source": "./",
+      "description": "Diagrams as code with D2: SVG output, TALA layout with ELK fallback, a render-and-self-check loop that catches layout defects before delivery, and an extended D2 syntax/pattern reference.",
+      "category": "productivity",
+      "tags": ["d2", "diagrams", "architecture", "svg"]
+    }
+  ]
+}

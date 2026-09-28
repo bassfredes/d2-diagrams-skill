@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "d2-diagrams",
+  "displayName": "D2 Diagrams",
+  "version": "0.1.0",
+  "description": "Diagrams as code with D2: writes D2 source, renders SVG with the best available layout engine (TALA when licensed, ELK fallback), views its own render and fixes layout defects in a loop before delivering, backed by a full D2 syntax and pattern reference.",
+  "author": {
+    "name": "Bastian Fredes",
+    "url": "https://github.com/bassfredes"
+  },
+  "homepage": "https://github.com/bassfredes/d2-diagrams-skill",
+  "repository": "https://github.com/bassfredes/d2-diagrams-skill",
+  "license": "MIT",
+  "keywords": [
+    "d2",
+    "diagrams",
+    "architecture",
+    "svg",
+    "tala",
+    "elk",
+    "diagram-as-code",
+    "visualization"
+  ]
+}
